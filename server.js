@@ -116,7 +116,7 @@ const server = http.createServer(async (req, res) => {
 
         req.on('end', async () => {
             try {
-                const { url, options } = JSON.parse(body);
+                const { url, options, wait } = JSON.parse(body);
 
                 if (!url) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -126,6 +126,10 @@ const server = http.createServer(async (req, res) => {
 
                 addToQueue(async (page) => {
                     await page.goto(url, { waitUntil: 'networkidle2' });
+                    if (wait && typeof wait === 'number') {
+                        console.log(`Waiting for ${wait} ms...`);
+                        await new Promise(resolve => setTimeout(resolve, wait));
+                    }
                     return await page.pdf({ format: 'A4', ...options });
                 })
                 .then((pdfBuffer) => {
