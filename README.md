@@ -54,6 +54,7 @@ The service accepts JSON input with the following structure:
 ```
 
 - `url` (string, required): The URL of the page to generate the PDF from.
+- `wait` (int, optional): the delay in milliseconds after the page loads.
 - `options` (object, optional): Puppeteer PDF options. Refer to [Puppeteer documentation](https://pptr.dev/api/puppeteer.pdfoptions) for the full list of available options.
 
 ### Response
