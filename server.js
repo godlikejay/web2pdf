@@ -23,7 +23,7 @@ const startBrowser = async () => {
                 await restartBrowser();
             }
         });
-        console.log('Browser started.');
+        console.log(`Browser is ${browser ? 'active' : 'inactive'}`);
     } catch (error) {
         console.error('Failed to start browser:', error);
         process.exit(1);
@@ -51,6 +51,9 @@ const restartBrowser = async () => {
 
     errorCount = 0;
     successStreak = 0;
+
+    console.log('Browser restarted. Resuming queue processing...');
+    processQueue();
 };
 
 const acquirePage = async () => {
@@ -73,8 +76,9 @@ const releasePage = async (page) => {
 const processQueue = async () => {
     if (queue.length > 0 && currentPageCount < CONCURRENCY_LIMIT) {
         const { resolve, reject, task } = queue.shift();
+        let page = null;
         try {
-            const page = await acquirePage();
+            page = await acquirePage();
             const result = await task(page);
             await releasePage(page);
 
@@ -86,6 +90,9 @@ const processQueue = async () => {
             resolve(result);
         } catch (error) {
             console.error('Error processing task:', error);
+            if (page) {
+                await releasePage(page);
+            }
             reject(error);
 
             errorCount++;
@@ -94,8 +101,9 @@ const processQueue = async () => {
                 console.error('Error count exceeded limit. Restarting browser...');
                 await restartBrowser();
             }
+        } finally {
+            processQueue();
         }
-        processQueue();
     }
 };
 
@@ -125,6 +133,8 @@ const server = http.createServer(async (req, res) => {
                 }
 
                 addToQueue(async (page) => {
+                    console.log(`new task: ${url}`);
+
                     await page.goto(url, { waitUntil: 'networkidle2' });
                     if (wait && typeof wait === 'number') {
                         console.log(`Waiting for ${wait} ms...`);
