@@ -6,10 +6,16 @@ HTTP Server for generate PDFs from URLs
 
 ### 1. Build the Docker Image
 
-Clone the repository and navigate to the directory containing the Dockerfile. Build the Docker image using the following command:
+Clone the repository and navigate to the directory containing the Dockerfile.
 
+**For AMD64 (Standard):**
 ```bash
 docker build -t web2pdf .
+```
+
+**For ARM64 (Apple Silicon, Raspberry Pi):**
+```bash
+docker build -f Dockerfile.arm64 -t web2pdf .
 ```
 
 You can also get the pre-built image from [ghcr.io](ghcr.io/godlikejay/web2pdf)
@@ -27,6 +33,50 @@ docker run -d -p 3000:3000 --cap-add=SYS_ADMIN --rm --name web2pdf ghcr.io/godli
 ```
 
 Note the image requires the `SYS_ADMIN` capability since the browser might run in sandbox mode.
+
+## Custom Fonts
+
+This service supports custom fonts (e.g., for Chinese, Japanese, or special styling). You can add fonts in two ways:
+
+### Method 1: Dynamic Loading (Recommended)
+
+You can mount a local directory containing your font files (e.g., `.ttf`, `.otf`) to `/app/fonts` inside the container. The container will automatically install them at startup.
+
+```bash
+# 1. Prepare your fonts directory
+mkdir -p my-fonts
+cp /path/to/your/font.ttf my-fonts/
+
+# 2. Run with volume mount
+docker run -d -p 3000:3000 --cap-add=SYS_ADMIN --rm \
+  -v $(pwd)/my-fonts:/app/fonts \
+  --name web2pdf \
+  ghcr.io/godlikejay/web2pdf:latest
+```
+
+### Method 2: Build into Image
+
+If you prefer to package the fonts inside the image, you can create a custom `Dockerfile` extending this one:
+
+```dockerfile
+FROM ghcr.io/godlikejay/web2pdf:latest
+
+# Switch to root to perform installation (if needed) or just copy to user font dir
+USER pptruser
+
+# Copy your fonts to the user's font directory
+COPY ./my-fonts/*.ttf /home/pptruser/.fonts/
+
+# Update font cache
+USER root
+RUN fc-cache -f -v
+USER pptruser
+```
+
+Then build your custom image:
+```bash
+docker build -t my-web2pdf-with-fonts .
+```
 
 ## API Usage
 
