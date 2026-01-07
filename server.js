@@ -72,7 +72,8 @@ const acquirePage = async () => {
     }
     currentPageCount++;
     try {
-        return await browser.newPage();
+        const context = await browser.createBrowserContext();
+        return await context.newPage();
     } catch (error) {
         currentPageCount--;
         throw error;
@@ -81,9 +82,10 @@ const acquirePage = async () => {
 
 const releasePage = async (page) => {
     try {
-        await page.close();
+        const context = page.browserContext();
+        await context.close();
     } catch (error) {
-        console.error('Error closing page:', error);
+        console.error('Error closing page context:', error);
     }
     currentPageCount--;
 };
