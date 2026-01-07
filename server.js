@@ -10,10 +10,11 @@ const ERROR_RESTART_THRESHOLD = process.env.ERROR_RESTART_THRESHOLD || 5;
 const ERROR_RESET_THRESHOLD = process.env.ERROR_RESET_THRESHOLD || 3;
 const TEMP_DIR = path.join(__dirname, 'temp_html');
 
-// Ensure temp directory exists
-if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR);
+// Ensure temp directory exists and is clean on startup
+if (fs.existsSync(TEMP_DIR)) {
+    fs.rmSync(TEMP_DIR, { recursive: true, force: true });
 }
+fs.mkdirSync(TEMP_DIR);
 
 let browser;
 let isRestarting = false;
