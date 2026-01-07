@@ -70,7 +70,12 @@ const acquirePage = async () => {
         await new Promise(resolve => setTimeout(resolve, 100)); // 等待
     }
     currentPageCount++;
-    return await browser.newPage();
+    try {
+        return await browser.newPage();
+    } catch (error) {
+        currentPageCount--;
+        throw error;
+    }
 };
 
 const releasePage = async (page) => {
