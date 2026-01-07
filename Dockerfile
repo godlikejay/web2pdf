@@ -25,6 +25,11 @@ RUN chown -R pptruser:pptruser /app
 # Switch back to non-root user
 USER pptruser
 
+ENV PORT=3000
+ENV CONCURRENCY_LIMIT=5
+ENV ERROR_RESTART_THRESHOLD=5
+ENV ERROR_RESET_THRESHOLD=3
+
 EXPOSE 3000
 
 # Use the entrypoint script to handle dynamic font loading

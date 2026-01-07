@@ -1,10 +1,10 @@
 const http = require('http');
 const puppeteer = require('puppeteer');
 
-const PORT = process.env.PORT || 3000;;
+const PORT = process.env.PORT || 3000;
 const CONCURRENCY_LIMIT = process.env.CONCURRENCY_LIMIT || 5;
-const ERROR_RESTART_THRESHOLD = process.env.PORT || 5;
-const ERROR_RESET_THRESHOLD = process.env.PORT || 3;
+const ERROR_RESTART_THRESHOLD = process.env.ERROR_RESTART_THRESHOLD || 5;
+const ERROR_RESET_THRESHOLD = process.env.ERROR_RESET_THRESHOLD || 3;
 
 let browser;
 let isRestarting = false;

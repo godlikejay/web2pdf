@@ -34,6 +34,29 @@ docker run -d -p 3000:3000 --cap-add=SYS_ADMIN --rm --name web2pdf ghcr.io/godli
 
 Note the image requires the `SYS_ADMIN` capability since the browser might run in sandbox mode.
 
+### Run with Custom Configuration
+
+You can adjust settings like concurrency limits by passing environment variables:
+
+```bash
+docker run -d -p 3000:3000 --cap-add=SYS_ADMIN --rm \
+  -e CONCURRENCY_LIMIT=10 \
+  -e ERROR_RESTART_THRESHOLD=10 \
+  --name web2pdf \
+  ghcr.io/godlikejay/web2pdf:latest
+```
+
+## Configuration
+
+You can configure the service using environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Port the server listens on. |
+| `CONCURRENCY_LIMIT` | `5` | Maximum number of concurrent PDF generation tasks. |
+| `ERROR_RESTART_THRESHOLD` | `5` | Number of consecutive errors before restarting the browser. |
+| `ERROR_RESET_THRESHOLD` | `3` | Number of consecutive successes to reset the error count. |
+
 ## Custom Fonts
 
 This service supports custom fonts (e.g., for Chinese, Japanese, or special styling). You can add fonts in two ways:
