@@ -160,12 +160,19 @@ const server = http.createServer(async (req, res) => {
         });
     } else if (req.method === 'POST' && req.url === '/generate-pdf') {
         let body = '';
+        const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB
 
         req.on('data', chunk => {
             body += chunk.toString();
+            if (Buffer.byteLength(body) > MAX_BODY_SIZE) {
+                res.writeHead(413, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Request entity too large' }));
+                req.destroy();
+            }
         });
 
         req.on('end', async () => {
+            if (req.destroyed) return;
             try {
                 const { url, html, options, wait } = JSON.parse(body);
 
