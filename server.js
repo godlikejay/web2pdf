@@ -1,10 +1,19 @@
 const http = require('http');
 const puppeteer = require('puppeteer');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
 const CONCURRENCY_LIMIT = process.env.CONCURRENCY_LIMIT || 5;
 const ERROR_RESTART_THRESHOLD = process.env.ERROR_RESTART_THRESHOLD || 5;
 const ERROR_RESET_THRESHOLD = process.env.ERROR_RESET_THRESHOLD || 3;
+const TEMP_DIR = path.join(__dirname, 'temp_html');
+
+// Ensure temp directory exists
+if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR);
+}
 
 let browser;
 let isRestarting = false;
@@ -123,6 +132,26 @@ const server = http.createServer(async (req, res) => {
             res.writeHead(503, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ status: 'error', message: 'Browser not connected' }));
         }
+    } else if (req.method === 'GET' && req.url.startsWith('/temp/')) {
+        const filename = path.basename(req.url);
+        const filePath = path.join(TEMP_DIR, filename);
+
+        // Security check: prevent directory traversal
+        if (!path.resolve(filePath).startsWith(path.resolve(TEMP_DIR))) {
+            res.writeHead(403);
+            res.end('Forbidden');
+            return;
+        }
+
+        fs.readFile(filePath, (err, data) => {
+            if (err) {
+                res.writeHead(404);
+                res.end('Not Found');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(data);
+        });
     } else if (req.method === 'POST' && req.url === '/generate-pdf') {
         let body = '';
 
@@ -132,23 +161,41 @@ const server = http.createServer(async (req, res) => {
 
         req.on('end', async () => {
             try {
-                const { url, options, wait } = JSON.parse(body);
+                const { url, html, options, wait } = JSON.parse(body);
 
-                if (!url) {
+                if (!url && !html) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'URL is required' }));
+                    res.end(JSON.stringify({ error: 'URL or HTML content is required' }));
                     return;
                 }
 
-                addToQueue(async (page) => {
-                    console.log(`new task: ${url}`);
+                let targetUrl = url;
+                let tempFilePath = null;
 
-                    await page.goto(url, { waitUntil: 'networkidle2' });
-                    if (wait && typeof wait === 'number') {
-                        console.log(`Waiting for ${wait} ms...`);
-                        await new Promise(resolve => setTimeout(resolve, wait));
+                if (html) {
+                    const id = crypto.randomUUID();
+                    const filename = `${id}.html`;
+                    tempFilePath = path.join(TEMP_DIR, filename);
+                    fs.writeFileSync(tempFilePath, html);
+                    targetUrl = `http://localhost:${PORT}/temp/${filename}`;
+                }
+
+                addToQueue(async (page) => {
+                    console.log(`new task: ${targetUrl}`);
+                    try {
+                        await page.goto(targetUrl, { waitUntil: 'networkidle2' });
+                        if (wait && typeof wait === 'number') {
+                            console.log(`Waiting for ${wait} ms...`);
+                            await new Promise(resolve => setTimeout(resolve, wait));
+                        }
+                        return await page.pdf({ format: 'A4', ...options });
+                    } finally {
+                        if (tempFilePath) {
+                            fs.unlink(tempFilePath, (err) => {
+                                if (err) console.error(`Error deleting temp file ${tempFilePath}:`, err);
+                            });
+                        }
                     }
-                    return await page.pdf({ format: 'A4', ...options });
                 })
                 .then((pdfBuffer) => {
                     res.writeHead(200, { 'Content-Type': 'application/pdf' });

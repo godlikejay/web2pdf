@@ -1,6 +1,6 @@
 # web2pdf
 
-HTTP Server for generate PDFs from URLs
+HTTP Server for generate PDFs from URLs or HTML content.
 
 ## Getting Started
 
@@ -128,6 +128,8 @@ The service accepts JSON input with the following structure:
 ```json
 {
   "url": "https://github.com/godlikejay/web2pdf",
+  "html": "<html><body><h1>Hello World</h1></body></html>",
+  "wait": 1000,
   "options": {
     "format": "letter",
     "landscape": true,
@@ -136,18 +138,21 @@ The service accepts JSON input with the following structure:
 }
 ```
 
-- `url` (string, required): The URL of the page to generate the PDF from.
+- `url` (string, optional*): The URL of the page to generate the PDF from.
+- `html` (string, optional*): The HTML content to generate the PDF from.
 - `wait` (int, optional): the delay in milliseconds after the page loads.
 - `options` (object, optional): Puppeteer PDF options. Refer to [Puppeteer documentation](https://pptr.dev/api/puppeteer.pdfoptions) for the full list of available options.
+
+***Note:** You must provide either `url` or `html`. If both are provided, **`html` takes precedence** over `url`. The service handles HTML content by saving it to a temporary file, rendering it via a local URL, and automatically cleaning it up afterwards.
 
 ### Response
 
 - Success: Returns a PDF file in binary format.
 - Failure: Returns an error message in JSON format.
 
-## Example with cURL
+## Examples with cURL
 
-Run the following curl command to generate a PDF:
+### Example 1: Generate from URL
 
 ```bash
 curl -X POST http://localhost:3000/generate-pdf \
@@ -158,5 +163,19 @@ curl -X POST http://localhost:3000/generate-pdf \
     "format": "letter",
     "printBackground": true
   }
-}' --output output.pdf
+}' --output output_url.pdf
+```
+
+### Example 2: Generate from HTML Content
+
+```bash
+curl -X POST http://localhost:3000/generate-pdf \
+-H "Content-Type: application/json" \
+-d '{
+  "html": "<html><body><h1>Hello, World!</h1><p>This is a PDF generated from raw HTML.</p></body></html>",
+  "options": {
+    "format": "A4",
+    "printBackground": true
+  }
+}' --output output_html.pdf
 ```
