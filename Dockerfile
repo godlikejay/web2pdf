@@ -1,4 +1,4 @@
-FROM ghcr.io/puppeteer/puppeteer:23.11.1
+FROM ghcr.io/puppeteer/puppeteer:24.34.0
 
 USER root
 
