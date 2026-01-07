@@ -226,9 +226,11 @@ const server = http.createServer(async (req, res) => {
                         return await page.pdf({ format: 'A4', ...options });
                     } finally {
                         if (tempFilePath) {
-                            fs.unlink(tempFilePath, (err) => {
-                                if (err) console.error(`Error deleting temp file ${tempFilePath}:`, err);
-                            });
+                            try {
+                                await fs.promises.unlink(tempFilePath);
+                            } catch (err) {
+                                console.error(`Error deleting temp file ${tempFilePath}:`, err);
+                            }
                         }
                     }
                 })
