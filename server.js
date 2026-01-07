@@ -273,7 +273,14 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
 })();
 
 process.on('SIGINT', async () => {
-    console.log('\nClosing browser instance...');
+    console.log('\nReceived SIGINT. Shutting down gracefully...');
+    
+    server.close(() => {
+        console.log('HTTP server closed.');
+    });
+
     await closeBrowser();
+    console.log('Browser instance closed.');
+
     process.exit(0);
 });
