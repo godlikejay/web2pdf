@@ -159,21 +159,25 @@ const server = http.createServer(async (req, res) => {
             res.end(data);
         });
     } else if (req.method === 'POST' && req.url === '/generate-pdf') {
-        let body = '';
+        const bodyChunks = [];
+        let bodySize = 0;
         const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB
 
         req.on('data', chunk => {
-            body += chunk.toString();
-            if (Buffer.byteLength(body) > MAX_BODY_SIZE) {
+            bodySize += chunk.length;
+            if (bodySize > MAX_BODY_SIZE) {
                 res.writeHead(413, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'Request entity too large' }));
                 req.destroy();
+                return;
             }
+            bodyChunks.push(chunk);
         });
 
         req.on('end', async () => {
             if (req.destroyed) return;
             try {
+                const body = Buffer.concat(bodyChunks).toString();
                 const { url, html, options, wait } = JSON.parse(body);
 
                 if (!url && !html) {
