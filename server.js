@@ -150,16 +150,14 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
-        // Check if file exists before streaming
-        fs.access(filePath, fs.constants.F_OK, (err) => {
-            if (err) {
-                res.writeHead(404);
-                res.end('Not Found');
-                return;
-            }
+        try {
+            await fs.promises.access(filePath, fs.constants.F_OK);
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             fs.createReadStream(filePath).pipe(res);
-        });
+        } catch (err) {
+            res.writeHead(404);
+            res.end('Not Found');
+        }
     } else if (req.method === 'POST' && req.url === '/generate-pdf') {
         const bodyChunks = [];
         let bodySize = 0;
