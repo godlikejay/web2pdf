@@ -115,7 +115,15 @@ const addToQueue = (task) => {
 };
 
 const server = http.createServer(async (req, res) => {
-    if (req.method === 'POST' && req.url === '/generate-pdf') {
+    if (req.method === 'GET' && req.url === '/health') {
+        if (browser && browser.isConnected()) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'ok' }));
+        } else {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'error', message: 'Browser not connected' }));
+        }
+    } else if (req.method === 'POST' && req.url === '/generate-pdf') {
         let body = '';
 
         req.on('data', chunk => {

@@ -78,6 +78,16 @@ Then build your custom image:
 docker build -t my-web2pdf-with-fonts .
 ```
 
+## Health Check
+
+The service provides a health check endpoint for Kubernetes Liveness and Readiness probes.
+
+**Endpoint**: `GET /health`
+
+**Response**:
+- `200 OK`: Browser instance is connected.
+- `503 Service Unavailable`: Browser instance is disconnected or restarting.
+
 ## API Usage
 
 ### Endpoint
