@@ -176,7 +176,7 @@ const server = http.createServer(async (req, res) => {
                     const id = crypto.randomUUID();
                     const filename = `${id}.html`;
                     tempFilePath = path.join(TEMP_DIR, filename);
-                    fs.writeFileSync(tempFilePath, html);
+                    await fs.promises.writeFile(tempFilePath, html);
                     targetUrl = `http://localhost:${PORT}/temp/${filename}`;
                 }
 
