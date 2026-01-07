@@ -174,6 +174,22 @@ const server = http.createServer(async (req, res) => {
                     return;
                 }
 
+                // Security check: validate URL protocol if URL is provided and HTML is not
+                if (url && !html) {
+                    try {
+                        const parsedUrl = new URL(url);
+                        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+                            res.writeHead(400, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ error: 'Invalid URL protocol. Only http and https are allowed.' }));
+                            return;
+                        }
+                    } catch (e) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Invalid URL format' }));
+                        return;
+                    }
+                }
+
                 let targetUrl = url;
                 let tempFilePath = null;
 
