@@ -272,8 +272,8 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
     });
 })();
 
-process.on('SIGINT', async () => {
-    console.log('\nReceived SIGINT. Shutting down gracefully...');
+const gracefulShutdown = async (signal) => {
+    console.log(`\nReceived ${signal}. Shutting down gracefully...`);
     
     server.close(() => {
         console.log('HTTP server closed.');
@@ -283,4 +283,7 @@ process.on('SIGINT', async () => {
     console.log('Browser instance closed.');
 
     process.exit(0);
-});
+};
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
