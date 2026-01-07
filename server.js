@@ -158,10 +158,14 @@ const server = http.createServer(async (req, res) => {
             res.writeHead(404);
             res.end('Not Found');
         }
+const MAX_BODY_SIZE = parseInt(process.env.MAX_REQUEST_BODY_SIZE || '10485760', 10); // Default 10MB
+const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Default 10s
+
+// ... (existing code) ...
+
     } else if (req.method === 'POST' && req.url === '/generate-pdf') {
         const bodyChunks = [];
         let bodySize = 0;
-        const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB
 
         req.on('data', chunk => {
             bodySize += chunk.length;
@@ -185,6 +189,13 @@ const server = http.createServer(async (req, res) => {
                     res.end(JSON.stringify({ error: 'URL or HTML content is required' }));
                     return;
                 }
+
+                // Security: Prevent arbitrary file writes by removing 'path' from options
+                const safeOptions = { ...options };
+                delete safeOptions.path;
+
+                // Security: Limit wait time to prevent holding resources too long
+                const waitTime = Math.min(Math.max(parseInt(wait || 0, 10), 0), MAX_WAIT_TIME);
 
                 // Security check: validate URL protocol if URL is provided and HTML is not
                 if (url && !html) {
@@ -217,11 +228,11 @@ const server = http.createServer(async (req, res) => {
                     console.log(`new task: ${targetUrl}`);
                     try {
                         await page.goto(targetUrl, { waitUntil: 'networkidle2' });
-                        if (wait && typeof wait === 'number') {
-                            console.log(`Waiting for ${wait} ms...`);
-                            await new Promise(resolve => setTimeout(resolve, wait));
+                        if (waitTime > 0) {
+                            console.log(`Waiting for ${waitTime} ms...`);
+                            await new Promise(resolve => setTimeout(resolve, waitTime));
                         }
-                        return await page.pdf({ format: 'A4', ...options });
+                        return await page.pdf({ format: 'A4', ...safeOptions });
                     } finally {
                         if (tempFilePath) {
                             try {
