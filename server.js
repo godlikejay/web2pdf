@@ -8,20 +8,74 @@ const PORT = process.env.PORT || 3000;
 const CONCURRENCY_LIMIT = process.env.CONCURRENCY_LIMIT || 5;
 const ERROR_RESTART_THRESHOLD = process.env.ERROR_RESTART_THRESHOLD || 5;
 const ERROR_RESET_THRESHOLD = process.env.ERROR_RESET_THRESHOLD || 3;
+const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Default 10s
+const MAX_REQUESTS_BEFORE_RESTART = parseInt(process.env.MAX_REQUESTS_BEFORE_RESTART || '1000', 10);
+
 const TEMP_DIR = path.join(__dirname, 'temp_html');
 
-// Ensure temp directory exists and is clean on startup
-if (fs.existsSync(TEMP_DIR)) {
-    fs.rmSync(TEMP_DIR, { recursive: true, force: true });
-}
-fs.mkdirSync(TEMP_DIR);
+// ... (existing code) ...
 
-let browser;
-let isRestarting = false;
 let currentPageCount = 0;
 let errorCount = 0;
 let successStreak = 0;
+let totalRequestsProcessed = 0;
 const queue = [];
+
+// ... (existing code) ...
+
+const restartBrowser = async () => {
+    if (isRestarting) return;
+    isRestarting = true;
+    console.log('Restarting browser...');
+    await closeBrowser();
+    await startBrowser();
+    isRestarting = false;
+
+    errorCount = 0;
+    successStreak = 0;
+    totalRequestsProcessed = 0; // Reset total counter
+
+    console.log('Browser restarted. Resuming queue processing...');
+    processQueue();
+};
+
+// ... (existing code) ...
+
+const processQueue = async () => {
+    if (queue.length > 0 && currentPageCount < CONCURRENCY_LIMIT) {
+        const { resolve, reject, task } = queue.shift();
+        let page = null;
+        try {
+            page = await acquirePage();
+            const result = await task(page);
+            await releasePage(page);
+
+            successStreak++;
+            if (successStreak >= ERROR_RESET_THRESHOLD) {
+                errorCount = 0;
+                successStreak = 0;
+            }
+
+            // Periodic restart check
+            totalRequestsProcessed++;
+            if (MAX_REQUESTS_BEFORE_RESTART > 0 && totalRequestsProcessed >= MAX_REQUESTS_BEFORE_RESTART) {
+                console.log(`Processed ${totalRequestsProcessed} requests. Triggering scheduled browser restart...`);
+                // Use setTimeout to allow current stack to unwind before restarting
+                // But since restartBrowser awaits closeBrowser which awaits page closes, it should be safe.
+                // However, we are currently inside processQueue recursion (via finally).
+                // It's safer to flag for restart or call it.
+                // Since processQueue is called in finally, we should be careful not to create a race condition.
+                // But restartBrowser sets isRestarting=true which blocks other processQueue calls effectively.
+                
+                // We'll call restartBrowser() but return immediately to stop this 'thread' of processQueue
+                // The restartBrowser function calls processQueue at the end.
+                restartBrowser();
+                return; 
+            }
+
+            resolve(result);
+        } catch (error) {
+// ... (existing code) ...
 
 const startBrowser = async () => {
     try {
@@ -61,6 +115,7 @@ const restartBrowser = async () => {
 
     errorCount = 0;
     successStreak = 0;
+    totalRequestsProcessed = 0;
 
     console.log('Browser restarted. Resuming queue processing...');
     processQueue();
@@ -91,6 +146,8 @@ const releasePage = async (page) => {
 };
 
 const processQueue = async () => {
+    if (isRestarting) return;
+
     if (queue.length > 0 && currentPageCount < CONCURRENCY_LIMIT) {
         const { resolve, reject, task } = queue.shift();
         let page = null;
@@ -105,6 +162,13 @@ const processQueue = async () => {
                 successStreak = 0;
             }
             resolve(result);
+
+            totalRequestsProcessed++;
+            if (MAX_REQUESTS_BEFORE_RESTART > 0 && totalRequestsProcessed >= MAX_REQUESTS_BEFORE_RESTART) {
+                console.log(`Processed ${totalRequestsProcessed} requests. Restarting browser to release resources...`);
+                restartBrowser();
+            }
+
         } catch (error) {
             console.error('Error processing task:', error);
             if (page) {
