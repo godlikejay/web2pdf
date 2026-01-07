@@ -138,7 +138,8 @@ const server = http.createServer(async (req, res) => {
             res.end(JSON.stringify({ status: 'error', message: 'Browser not connected' }));
         }
     } else if (req.method === 'GET' && req.url.startsWith('/temp/')) {
-        const filename = path.basename(req.url);
+        const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+        const filename = path.basename(parsedUrl.pathname);
         const filePath = path.join(TEMP_DIR, filename);
 
         // Security check: prevent directory traversal
