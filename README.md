@@ -1,6 +1,6 @@
 # web2pdf
 
-![Docker Publish](https://github.com/godlikejay/web2pdf/actions/workflows/docker-publish.yml/badge.svg)
+[![Docker Publish](https://github.com/godlikejay/web2pdf/actions/workflows/docker-publish.yml/badge.svg)](https://ghcr.io/godlikejay/web2pdf)
 
 HTTP Server for generate PDFs from URLs or HTML content.
 
@@ -20,7 +20,7 @@ docker build -t web2pdf .
 docker build -f Dockerfile.arm64 -t web2pdf .
 ```
 
-You can also get the pre-built image from [ghcr.io](ghcr.io/godlikejay/web2pdf)
+You can also get the pre-built image from [ghcr.io](https://ghcr.io/godlikejay/web2pdf)
 
 ```bash
 docker pull ghcr.io/godlikejay/web2pdf:latest
