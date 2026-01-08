@@ -255,7 +255,7 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
             if (req.destroyed) return;
             try {
                 const body = Buffer.concat(bodyChunks).toString();
-                const { url, html, options, wait } = JSON.parse(body);
+                const { url, html, options, wait, mediaType } = JSON.parse(body);
 
                 if (!url && !html) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -300,6 +300,10 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
                 addToQueue(async (page) => {
                     console.log(`new task: ${targetUrl}`);
                     try {
+                        if (mediaType) {
+                            console.log(`Setting media type to: ${mediaType}`);
+                            await page.emulateMediaType(mediaType);
+                        }
                         await page.goto(targetUrl, { waitUntil: 'networkidle2' });
                         if (waitTime > 0) {
                             console.log(`Waiting for ${waitTime} ms...`);
