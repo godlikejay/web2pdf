@@ -255,7 +255,7 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
             if (req.destroyed) return;
             try {
                 const body = Buffer.concat(bodyChunks).toString();
-                const { url, html, options, wait, mediaType } = JSON.parse(body);
+                const { url, html, options, wait, mediaType, loadTimeout, printTimeout, renderDelay } = JSON.parse(body);
 
                 if (!url && !html) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -267,8 +267,10 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
                 const safeOptions = { ...options };
                 delete safeOptions.path;
 
-                // Security: Limit wait time to prevent holding resources too long
-                const waitTime = Math.min(Math.max(parseInt(wait || 0, 10), 0), MAX_WAIT_TIME);
+                // Security: Limit wait time (renderDelay) to prevent holding resources too long
+                // Priority: renderDelay > wait (backward compatibility)
+                const rawDelay = (typeof renderDelay === 'number') ? renderDelay : (typeof wait === 'number' ? wait : 0);
+                const finalDelay = Math.min(Math.max(rawDelay, 0), MAX_WAIT_TIME);
 
                 // Security check: validate URL protocol if URL is provided and HTML is not
                 if (url && !html) {
@@ -304,12 +306,25 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
                             console.log(`Setting media type to: ${mediaType}`);
                             await page.emulateMediaType(mediaType);
                         }
-                        await page.goto(targetUrl, { waitUntil: 'networkidle2' });
-                        if (waitTime > 0) {
-                            console.log(`Waiting for ${waitTime} ms...`);
-                            await new Promise(resolve => setTimeout(resolve, waitTime));
+
+                        // Configure navigation (load) timeout
+                        const gotoOptions = { waitUntil: 'networkidle2' };
+                        if (typeof loadTimeout === 'number') {
+                            gotoOptions.timeout = loadTimeout;
                         }
-                        return await page.pdf({ format: 'A4', ...safeOptions });
+                        await page.goto(targetUrl, gotoOptions);
+
+                        if (finalDelay > 0) {
+                            console.log(`Waiting for ${finalDelay} ms...`);
+                            await new Promise(resolve => setTimeout(resolve, finalDelay));
+                        }
+
+                        // Configure PDF generation (print) timeout
+                        const pdfOptions = { format: 'A4', ...safeOptions };
+                        if (typeof printTimeout === 'number') {
+                            pdfOptions.timeout = printTimeout;
+                        }
+                        return await page.pdf(pdfOptions);
                     } finally {
                         if (tempFilePath) {
                             try {
