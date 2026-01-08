@@ -132,7 +132,10 @@ The service accepts JSON input with the following structure:
 {
   "url": "https://github.com/godlikejay/web2pdf",
   "html": "<html><body><h1>Hello World</h1></body></html>",
-  "wait": 1000,
+  "renderDelay": 1000,
+  "loadTimeout": 30000,
+  "printTimeout": 30000,
+  "mediaType": "screen",
   "options": {
     "format": "letter",
     "landscape": true,
@@ -143,7 +146,11 @@ The service accepts JSON input with the following structure:
 
 - `url` (string, optional*): The URL of the page to generate the PDF from.
 - `html` (string, optional*): The HTML content to generate the PDF from.
-- `wait` (int, optional): the delay in milliseconds after the page loads.
+- `renderDelay` (int, optional): The delay in milliseconds after the page loads and before generating the PDF (replaces `wait`).
+- `loadTimeout` (int, optional): The maximum time in milliseconds to wait for the page to load (default: 30000).
+- `printTimeout` (int, optional): The maximum time in milliseconds to wait for the PDF generation (default: 30000).
+- `mediaType` (string, optional): The media type to emulate, e.g., `"screen"` or `"print"`.
+- `wait` (int, optional): Backward compatible alias for `renderDelay`.
 - `options` (object, optional): Puppeteer PDF options. Refer to [Puppeteer documentation](https://pptr.dev/api/puppeteer.pdfoptions) for the full list of available options.
 
 ***Note:** You must provide either `url` or `html`. If both are provided, **`html` takes precedence** over `url`. The service handles HTML content by saving it to a temporary file, rendering it via a local URL, and automatically cleaning it up afterwards.
