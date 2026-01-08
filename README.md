@@ -1,5 +1,7 @@
 # web2pdf
 
+![Docker Publish](https://github.com/godlikejay/web2pdf/actions/workflows/docker-publish.yml/badge.svg)
+
 HTTP Server for generate PDFs from URLs or HTML content.
 
 ## Getting Started
