@@ -58,6 +58,7 @@ You can configure the service using environment variables:
 | `ERROR_RESET_THRESHOLD` | `3` | Number of consecutive successes to reset the error count. |
 | `MAX_REQUEST_BODY_SIZE` | `10485760` | Maximum size of the request body in bytes (default 10MB). |
 | `MAX_WAIT_TIME` | `10000` | Maximum allowed 'wait' time in milliseconds (default 10s). |
+| `MAX_REQUESTS_BEFORE_RESTART` | `1000` | Number of requests before automatically restarting the browser (0 to disable). |
 
 ## Custom Fonts
 
