@@ -108,7 +108,14 @@ const closeBrowser = async () => {
 const restartBrowser = async () => {
     if (isRestarting) return;
     isRestarting = true;
-    console.log('Restarting browser...');
+    console.log('Restarting browser... waiting for active tasks to finish.');
+
+    // Wait for all active pages to be released
+    while (currentPageCount > 0) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    console.log('All tasks finished. Proceeding with restart.');
     await closeBrowser();
     await startBrowser();
     isRestarting = false;
