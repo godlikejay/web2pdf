@@ -8,7 +8,9 @@ const PORT = process.env.PORT || 3000;
 const CONCURRENCY_LIMIT = process.env.CONCURRENCY_LIMIT || 5;
 const ERROR_RESTART_THRESHOLD = process.env.ERROR_RESTART_THRESHOLD || 5;
 const ERROR_RESET_THRESHOLD = process.env.ERROR_RESET_THRESHOLD || 3;
-const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Default 10s
+const MAX_REQUEST_BODY_SIZE = parseInt(process.env.MAX_REQUEST_BODY_SIZE || '10485760', 10); // Default 10MB
+const MAX_RENDER_DELAY = parseInt(process.env.MAX_RENDER_DELAY || '10000', 10); // Default 10s
+const MAX_TIMEOUT = parseInt(process.env.MAX_TIMEOUT || '60000', 10); // Default 60s
 const MAX_REQUESTS_BEFORE_RESTART = parseInt(process.env.MAX_REQUESTS_BEFORE_RESTART || '1000', 10);
 
 const TEMP_DIR = path.join(__dirname, 'temp_html');
@@ -267,10 +269,10 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
                 const safeOptions = { ...options };
                 delete safeOptions.path;
 
-                // Security: Limit wait time (renderDelay) to prevent holding resources too long
+                // Security: Limit render delay to prevent holding resources too long
                 // Priority: renderDelay > wait (backward compatibility)
                 const rawDelay = (typeof renderDelay === 'number') ? renderDelay : (typeof wait === 'number' ? wait : 0);
-                const finalDelay = Math.min(Math.max(rawDelay, 0), MAX_WAIT_TIME);
+                const finalDelay = Math.min(Math.max(rawDelay, 0), MAX_RENDER_DELAY);
 
                 // Security check: validate URL protocol if URL is provided and HTML is not
                 if (url && !html) {
@@ -307,10 +309,13 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
                             await page.emulateMediaType(mediaType);
                         }
 
-                        // Configure navigation (load) timeout
+                        // Configure navigation (load) timeout with security limits
                         const gotoOptions = { waitUntil: 'networkidle2' };
                         if (typeof loadTimeout === 'number') {
-                            gotoOptions.timeout = loadTimeout;
+                            // If 0 or larger than MAX_TIMEOUT, cap at MAX_TIMEOUT.
+                            // If negative, treat as 0 (then cap).
+                            let t = loadTimeout <= 0 ? MAX_TIMEOUT : loadTimeout;
+                            gotoOptions.timeout = Math.min(t, MAX_TIMEOUT);
                         }
                         await page.goto(targetUrl, gotoOptions);
 
@@ -319,10 +324,11 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
                             await new Promise(resolve => setTimeout(resolve, finalDelay));
                         }
 
-                        // Configure PDF generation (print) timeout
+                        // Configure PDF generation (print) timeout with security limits
                         const pdfOptions = { format: 'A4', ...safeOptions };
                         if (typeof printTimeout === 'number') {
-                            pdfOptions.timeout = printTimeout;
+                            let t = printTimeout <= 0 ? MAX_TIMEOUT : printTimeout;
+                            pdfOptions.timeout = Math.min(t, MAX_TIMEOUT);
                         }
                         return await page.pdf(pdfOptions);
                     } finally {
