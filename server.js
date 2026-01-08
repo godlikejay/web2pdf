@@ -5,84 +5,36 @@ const path = require('path');
 const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
-const CONCURRENCY_LIMIT = process.env.CONCURRENCY_LIMIT || 5;
-const ERROR_RESTART_THRESHOLD = process.env.ERROR_RESTART_THRESHOLD || 5;
-const ERROR_RESET_THRESHOLD = process.env.ERROR_RESET_THRESHOLD || 3;
+const CONCURRENCY_LIMIT = parseInt(process.env.CONCURRENCY_LIMIT || '5', 10);
+const ERROR_RESTART_THRESHOLD = parseInt(process.env.ERROR_RESTART_THRESHOLD || '5', 10);
+const ERROR_RESET_THRESHOLD = parseInt(process.env.ERROR_RESET_THRESHOLD || '3', 10);
 const MAX_REQUEST_BODY_SIZE = parseInt(process.env.MAX_REQUEST_BODY_SIZE || '10485760', 10); // Default 10MB
 const MAX_RENDER_DELAY = parseInt(process.env.MAX_RENDER_DELAY || '30000', 10); // Default 30s
 const MAX_TIMEOUT = parseInt(process.env.MAX_TIMEOUT || '60000', 10); // Default 60s
-const MAX_REQUESTS_BEFORE_RESTART = parseInt(process.env.MAX_REQUESTS_BEFORE_RESTART || '1000', 10);
+const MAX_REQUESTS_BEFORE_RESTART = parseInt(process.env.MAX_REQUESTS_BEFORE_RESTART || '1000', 10); // Default 1000 requests
 
 const TEMP_DIR = path.join(__dirname, 'temp_html');
 
-// ... (existing code) ...
+// Ensure temp directory exists
+if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
 
+let browser = null;
+let isRestarting = false;
 let currentPageCount = 0;
 let errorCount = 0;
 let successStreak = 0;
 let totalRequestsProcessed = 0;
 const queue = [];
 
-// ... (existing code) ...
-
-const restartBrowser = async () => {
-    if (isRestarting) return;
-    isRestarting = true;
-    console.log('Restarting browser...');
-    await closeBrowser();
-    await startBrowser();
-    isRestarting = false;
-
-    errorCount = 0;
-    successStreak = 0;
-    totalRequestsProcessed = 0; // Reset total counter
-
-    console.log('Browser restarted. Resuming queue processing...');
-    processQueue();
-};
-
-// ... (existing code) ...
-
-const processQueue = async () => {
-    if (queue.length > 0 && currentPageCount < CONCURRENCY_LIMIT) {
-        const { resolve, reject, task } = queue.shift();
-        let page = null;
-        try {
-            page = await acquirePage();
-            const result = await task(page);
-            await releasePage(page);
-
-            successStreak++;
-            if (successStreak >= ERROR_RESET_THRESHOLD) {
-                errorCount = 0;
-                successStreak = 0;
-            }
-
-            // Periodic restart check
-            totalRequestsProcessed++;
-            if (MAX_REQUESTS_BEFORE_RESTART > 0 && totalRequestsProcessed >= MAX_REQUESTS_BEFORE_RESTART) {
-                console.log(`Processed ${totalRequestsProcessed} requests. Triggering scheduled browser restart...`);
-                // Use setTimeout to allow current stack to unwind before restarting
-                // But since restartBrowser awaits closeBrowser which awaits page closes, it should be safe.
-                // However, we are currently inside processQueue recursion (via finally).
-                // It's safer to flag for restart or call it.
-                // Since processQueue is called in finally, we should be careful not to create a race condition.
-                // But restartBrowser sets isRestarting=true which blocks other processQueue calls effectively.
-                
-                // We'll call restartBrowser() but return immediately to stop this 'thread' of processQueue
-                // The restartBrowser function calls processQueue at the end.
-                restartBrowser();
-                return; 
-            }
-
-            resolve(result);
-        } catch (error) {
-// ... (existing code) ...
-
 const startBrowser = async () => {
     try {
         console.log('Starting browser...');
-        browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+        browser = await puppeteer.launch({
+            args: ['--no-sandbox', '--disable-dev-shm-usage'],
+            headless: true
+        });
         browser.on('disconnected', async () => {
             if (!isRestarting) {
                 console.error('Browser disconnected unexpectedly. Restarting...');
@@ -104,6 +56,7 @@ const closeBrowser = async () => {
         } catch (error) {
             console.error('Error closing browser:', error);
         }
+        browser = null;
     }
 };
 
@@ -112,12 +65,22 @@ const restartBrowser = async () => {
     isRestarting = true;
     console.log('Restarting browser... waiting for active tasks to finish.');
 
-    // Wait for all active pages to be released
-    while (currentPageCount > 0) {
+    // Wait for all active pages to be released with a timeout
+    let waitTime = 0;
+    const MAX_WAIT_TIME = 30000; // 30 seconds timeout
+
+    while (currentPageCount > 0 && waitTime < MAX_WAIT_TIME) {
         await new Promise(resolve => setTimeout(resolve, 500));
+        waitTime += 500;
     }
 
-    console.log('All tasks finished. Proceeding with restart.');
+    if (currentPageCount > 0) {
+        console.warn(`Warning: ${currentPageCount} tasks did not finish in time. Forcing browser restart.`);
+        currentPageCount = 0; // Force reset counter
+    } else {
+        console.log('All tasks finished. Proceeding with restart.');
+    }
+
     await closeBrowser();
     await startBrowser();
     isRestarting = false;
@@ -132,7 +95,7 @@ const restartBrowser = async () => {
 
 const acquirePage = async () => {
     while (currentPageCount >= CONCURRENCY_LIMIT) {
-        await new Promise(resolve => setTimeout(resolve, 100)); // 等待
+        await new Promise(resolve => setTimeout(resolve, 100));
     }
     currentPageCount++;
     try {
@@ -146,8 +109,10 @@ const acquirePage = async () => {
 
 const releasePage = async (page) => {
     try {
-        const context = page.browserContext();
-        await context.close();
+        if (page && !page.isClosed()) {
+            const context = page.browserContext();
+            await context.close();
+        }
     } catch (error) {
         console.error('Error closing page context:', error);
     }
@@ -164,6 +129,7 @@ const processQueue = async () => {
             page = await acquirePage();
             const result = await task(page);
             await releasePage(page);
+            page = null; // Mark as released
 
             successStreak++;
             if (successStreak >= ERROR_RESET_THRESHOLD) {
@@ -175,7 +141,11 @@ const processQueue = async () => {
             totalRequestsProcessed++;
             if (MAX_REQUESTS_BEFORE_RESTART > 0 && totalRequestsProcessed >= MAX_REQUESTS_BEFORE_RESTART) {
                 console.log(`Processed ${totalRequestsProcessed} requests. Restarting browser to release resources...`);
+                // Trigger restart but don't await it here to avoid blocking current request flow logic unnecessarily,
+                // though processQueue is recursive.
+                // Since restartBrowser sets isRestarting=true, subsequent processQueue calls will pause.
                 restartBrowser();
+                return; // Stop processing queue until restart completes
             }
 
         } catch (error) {
@@ -189,10 +159,14 @@ const processQueue = async () => {
             successStreak = 0;
             if (errorCount >= ERROR_RESTART_THRESHOLD) {
                 console.error('Error count exceeded limit. Restarting browser...');
-                await restartBrowser();
+                restartBrowser();
+                return; // Stop processing queue until restart completes
             }
         } finally {
-            processQueue();
+            // Continue processing if not restarting
+            if (!isRestarting) {
+                processQueue();
+            }
         }
     }
 };
@@ -204,14 +178,29 @@ const addToQueue = (task) => {
     });
 };
 
+const cleanupTempFiles = async () => {
+    console.log('Cleaning up stale temporary files...');
+    try {
+        const files = await fs.promises.readdir(TEMP_DIR);
+        for (const file of files) {
+            if (file.endsWith('.html')) {
+                await fs.promises.unlink(path.join(TEMP_DIR, file));
+            }
+        }
+        console.log('Cleanup complete.');
+    } catch (error) {
+        console.error('Error cleaning up temp files:', error);
+    }
+};
+
 const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
-        if (browser && browser.isConnected()) {
+        if (browser && browser.isConnected() && !isRestarting) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ status: 'ok' }));
         } else {
             res.writeHead(503, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ status: 'error', message: 'Browser not connected' }));
+            res.end(JSON.stringify({ status: 'error', message: 'Browser not ready' }));
         }
     } else if (req.method === 'GET' && req.url.startsWith('/temp/')) {
         const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
@@ -233,12 +222,8 @@ const server = http.createServer(async (req, res) => {
             res.writeHead(404);
             res.end('Not Found');
         }
-const MAX_BODY_SIZE = parseInt(process.env.MAX_REQUEST_BODY_SIZE || '10485760', 10); // Default 10MB
-const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Default 10s
-
-// ... (existing code) ...
-
     } else if (req.method === 'POST' && req.url === '/generate-pdf') {
+        const MAX_BODY_SIZE = MAX_REQUEST_BODY_SIZE;
         const bodyChunks = [];
         let bodySize = 0;
 
@@ -257,7 +242,22 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
             if (req.destroyed) return;
             try {
                 const body = Buffer.concat(bodyChunks).toString();
-                const { url, html, options, wait, mediaType, loadTimeout, printTimeout, renderDelay } = JSON.parse(body);
+                if (!body) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Empty request body' }));
+                    return;
+                }
+
+                let params;
+                try {
+                    params = JSON.parse(body);
+                } catch (e) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Invalid JSON' }));
+                    return;
+                }
+
+                const { url, html, options, wait, mediaType, loadTimeout, printTimeout, renderDelay } = params;
 
                 if (!url && !html) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -267,7 +267,7 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
 
                 // Security: Prevent arbitrary file writes by removing 'path' from options
                 const safeOptions = { ...options };
-                delete safeOptions.path;
+                if (safeOptions.path) delete safeOptions.path;
 
                 // Security: Limit render delay to prevent holding resources too long
                 // Priority: renderDelay > wait (backward compatibility)
@@ -302,7 +302,7 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
                 }
 
                 addToQueue(async (page) => {
-                    console.log(`new task: ${targetUrl}`);
+                    console.log(`Processing task: ${targetUrl}`);
                     try {
                         if (mediaType) {
                             console.log(`Setting media type to: ${mediaType}`);
@@ -312,11 +312,12 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
                         // Configure navigation (load) timeout with security limits
                         const gotoOptions = { waitUntil: 'networkidle2' };
                         if (typeof loadTimeout === 'number') {
-                            // If 0 or larger than MAX_TIMEOUT, cap at MAX_TIMEOUT.
-                            // If negative, treat as 0 (then cap).
                             let t = loadTimeout <= 0 ? MAX_TIMEOUT : loadTimeout;
                             gotoOptions.timeout = Math.min(t, MAX_TIMEOUT);
+                        } else {
+                            gotoOptions.timeout = MAX_TIMEOUT;
                         }
+
                         await page.goto(targetUrl, gotoOptions);
 
                         if (finalDelay > 0) {
@@ -329,7 +330,10 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
                         if (typeof printTimeout === 'number') {
                             let t = printTimeout <= 0 ? MAX_TIMEOUT : printTimeout;
                             pdfOptions.timeout = Math.min(t, MAX_TIMEOUT);
+                        } else {
+                            pdfOptions.timeout = MAX_TIMEOUT;
                         }
+
                         return await page.pdf(pdfOptions);
                     } finally {
                         if (tempFilePath) {
@@ -341,20 +345,23 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
                         }
                     }
                 })
-                .then((pdfBuffer) => {
-                    res.writeHead(200, { 'Content-Type': 'application/pdf' });
-                    res.end(pdfBuffer);
-                })
-                .catch((error) => {
-                    console.error('Error generating PDF:', error);
-                    res.writeHead(500, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'Failed to generate PDF' }));
-                });
+                    .then((pdfBuffer) => {
+                        res.writeHead(200, { 'Content-Type': 'application/pdf' });
+                        res.end(pdfBuffer);
+                    })
+                    .catch((error) => {
+                        console.error('Error generating PDF:', error);
+                        // Don't send error details to client for security, unless needed for debugging
+                        res.writeHead(500, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Failed to generate PDF' }));
+                    });
 
             } catch (error) {
-                console.error('Error parsing request:', error);
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Invalid JSON' }));
+                console.error('Error processing request:', error);
+                if (!res.headersSent) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                }
             }
         });
     } else {
@@ -363,25 +370,28 @@ const MAX_WAIT_TIME = parseInt(process.env.MAX_WAIT_TIME || '10000', 10); // Def
     }
 });
 
-(async () => {
-    await startBrowser();
-    server.listen(PORT, () => {
-        console.log(`Server is running at http://localhost:${PORT}`);
-    });
-})();
-
 const gracefulShutdown = async (signal) => {
     console.log(`\nReceived ${signal}. Shutting down gracefully...`);
-    
+
     server.close(() => {
         console.log('HTTP server closed.');
     });
 
     await closeBrowser();
-    console.log('Browser instance closed.');
+
+    // Cleanup any remaining temp files
+    await cleanupTempFiles();
 
     process.exit(0);
 };
+
+(async () => {
+    await cleanupTempFiles(); // Cleanup on startup
+    await startBrowser();
+    server.listen(PORT, () => {
+        console.log(`Server is running at http://localhost:${PORT}`);
+    });
+})();
 
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
