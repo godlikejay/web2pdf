@@ -9,7 +9,7 @@ const CONCURRENCY_LIMIT = process.env.CONCURRENCY_LIMIT || 5;
 const ERROR_RESTART_THRESHOLD = process.env.ERROR_RESTART_THRESHOLD || 5;
 const ERROR_RESET_THRESHOLD = process.env.ERROR_RESET_THRESHOLD || 3;
 const MAX_REQUEST_BODY_SIZE = parseInt(process.env.MAX_REQUEST_BODY_SIZE || '10485760', 10); // Default 10MB
-const MAX_RENDER_DELAY = parseInt(process.env.MAX_RENDER_DELAY || '10000', 10); // Default 10s
+const MAX_RENDER_DELAY = parseInt(process.env.MAX_RENDER_DELAY || '30000', 10); // Default 30s
 const MAX_TIMEOUT = parseInt(process.env.MAX_TIMEOUT || '60000', 10); // Default 60s
 const MAX_REQUESTS_BEFORE_RESTART = parseInt(process.env.MAX_REQUESTS_BEFORE_RESTART || '1000', 10);
 
